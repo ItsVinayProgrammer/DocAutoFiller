@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/vite-env.d.ts","./src/components/extractedform.tsx","./src/components/fileupload.tsx","./src/components/previewcard.tsx","./src/firebase/firebaseconfig.ts","./src/firebase/firestoreservice.ts","./src/utils/extractpdftext.ts","./src/utils/parsefields.ts","./src/utils/validators.ts"],"version":"5.9.3"}
