@@ -1,16 +1,15 @@
-import type { ExtractedFields, FormattedFinancialFields } from '../types';
+import { ConfidenceBadge } from './ConfidenceBadge';
+import { formatIndianCurrency } from '../utils/parseFields';
+import type { ConfidenceScores, ExtractedFields, FieldName, ValidationErrors } from '../types';
 
 type ExtractedFormProps = {
   fields: ExtractedFields;
-  formattedFinancialFields: FormattedFinancialFields;
-  onFieldChange: (field: keyof ExtractedFields, value: string) => void;
-  onSubmit: () => void;
-  isSubmitting: boolean;
-  validationErrors: string[];
-  canSubmit: boolean;
+  fieldConfidenceScores: ConfidenceScores;
+  validationErrors: ValidationErrors;
+  onFieldChange: (field: FieldName, value: string) => void;
 };
 
-const fieldLabels: Array<{ key: keyof ExtractedFields; label: string; placeholder: string }> = [
+const fieldLabels: Array<{ key: FieldName; label: string; placeholder: string }> = [
   { key: 'fullName', label: 'Full Name', placeholder: 'Applicant name' },
   { key: 'email', label: 'Email', placeholder: 'name@example.com' },
   { key: 'phoneNumber', label: 'Phone Number', placeholder: '10-digit mobile number' },
@@ -25,19 +24,18 @@ const fieldLabels: Array<{ key: keyof ExtractedFields; label: string; placeholde
 
 export function ExtractedForm({
   fields,
-  formattedFinancialFields,
-  onFieldChange,
-  onSubmit,
-  isSubmitting,
+  fieldConfidenceScores,
   validationErrors,
-  canSubmit,
+  onFieldChange,
 }: ExtractedFormProps) {
+  const getFieldError = (field: FieldName): string | undefined => validationErrors.fieldErrors[field]?.[0];
+
   return (
     <div className="card form-card">
       <div className="card-header">
         <div>
           <p className="card-label">Auto-filled application</p>
-          <h2>Review and submit</h2>
+          <h2>Borrower form</h2>
         </div>
         <span className="pill muted">Editable</span>
       </div>
@@ -45,37 +43,22 @@ export function ExtractedForm({
       <div className="form-grid">
         {fieldLabels.map(({ key, label, placeholder }) => (
           <label key={key} className="field">
-            <span>{label}</span>
+            <span className="field-label-row">
+              <span>{label}</span>
+              <ConfidenceBadge confidence={fieldConfidenceScores[key]} />
+            </span>
             <input
               type="text"
               value={fields[key]}
               placeholder={placeholder}
               onChange={(event) => onFieldChange(key, event.target.value)}
             />
-            {key === 'monthlyIncome' || key === 'requestedLoanAmount' ? (
-              <small className="field-hint">
-                Formatted preview: {formattedFinancialFields[key] ? `₹${formattedFinancialFields[key]}` : '—'}
-              </small>
+            {(key === 'monthlyIncome' || key === 'requestedLoanAmount') && fields[key] ? (
+              <small className="field-hint">Formatted preview: ₹{formatIndianCurrency(fields[key])}</small>
             ) : null}
+            {getFieldError(key) ? <small className="field-error">{getFieldError(key)}</small> : null}
           </label>
         ))}
-      </div>
-
-      {validationErrors.length > 0 ? (
-        <div className="validation-box">
-          <strong>Validation errors</strong>
-          <ul>
-            {validationErrors.map((error) => (
-              <li key={error}>{error}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
-      <div className="submit-row">
-        <button type="button" className="submit-button" onClick={onSubmit} disabled={!canSubmit || isSubmitting}>
-          {isSubmitting ? 'Submitting...' : 'Submit to Firestore'}
-        </button>
       </div>
     </div>
   );

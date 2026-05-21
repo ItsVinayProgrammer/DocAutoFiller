@@ -1,18 +1,20 @@
 import type { ChangeEvent } from 'react';
 
 type FileUploadProps = {
-  onFileSelected: (file: File) => void;
+  onFilesSelected: (files: File[]) => void;
   isLoading: boolean;
 };
 
-export function FileUpload({ onFileSelected, isLoading }: FileUploadProps) {
+export function FileUpload({ onFilesSelected, isLoading }: FileUploadProps) {
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+    const files = Array.from(event.target.files ?? []).filter(
+      (file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+    );
+    if (files.length === 0) {
       return;
     }
 
-    onFileSelected(file);
+    onFilesSelected(files);
     event.target.value = '';
   };
 
@@ -26,9 +28,9 @@ export function FileUpload({ onFileSelected, isLoading }: FileUploadProps) {
         {isLoading ? <span className="pill">Extracting...</span> : <span className="pill muted">Ready</span>}
       </div>
       <label className="upload-zone">
-        <input type="file" accept="application/pdf" onChange={handleChange} />
-        <span>Drop a PDF here or click to choose a file</span>
-        <small>PDF text extraction is enabled. OCR for image-only files can be added later.</small>
+        <input type="file" accept="application/pdf" multiple onChange={handleChange} />
+        <span>Drop one or more PDFs here or click to choose files</span>
+        <small>Process borrower forms, identity documents, and income proofs in one pass.</small>
       </label>
     </div>
   );
