@@ -26,8 +26,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   override componentDidCatch(error: Error, _errorInfo: React.ErrorInfo) {
-    // Keep the error visible in the console for debugging during the demo.
-    console.error(error);
+    if (import.meta.env.DEV) {
+      console.error(error);
+    }
   }
 
   override render() {

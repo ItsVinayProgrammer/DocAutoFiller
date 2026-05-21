@@ -4,3 +4,8 @@ build
 coverage
 .vscode
 .DS_Store
+.env
+.env.*
+!.env.example
+dist/
+*.tsbuildinfo
