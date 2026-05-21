@@ -1,7 +1,8 @@
-import type { ExtractedFields } from '../types';
+import type { ExtractedFields, FormattedFinancialFields } from '../types';
 
 type ExtractedFormProps = {
   fields: ExtractedFields;
+  formattedFinancialFields: FormattedFinancialFields;
   onFieldChange: (field: keyof ExtractedFields, value: string) => void;
   onSubmit: () => void;
   isSubmitting: boolean;
@@ -22,7 +23,15 @@ const fieldLabels: Array<{ key: keyof ExtractedFields; label: string; placeholde
   { key: 'requestedLoanAmount', label: 'Requested Loan Amount', placeholder: 'e.g. 250000' },
 ];
 
-export function ExtractedForm({ fields, onFieldChange, onSubmit, isSubmitting, validationErrors, canSubmit }: ExtractedFormProps) {
+export function ExtractedForm({
+  fields,
+  formattedFinancialFields,
+  onFieldChange,
+  onSubmit,
+  isSubmitting,
+  validationErrors,
+  canSubmit,
+}: ExtractedFormProps) {
   return (
     <div className="card form-card">
       <div className="card-header">
@@ -43,6 +52,11 @@ export function ExtractedForm({ fields, onFieldChange, onSubmit, isSubmitting, v
               placeholder={placeholder}
               onChange={(event) => onFieldChange(key, event.target.value)}
             />
+            {key === 'monthlyIncome' || key === 'requestedLoanAmount' ? (
+              <small className="field-hint">
+                Formatted preview: {formattedFinancialFields[key] ? `₹${formattedFinancialFields[key]}` : '—'}
+              </small>
+            ) : null}
           </label>
         ))}
       </div>

@@ -1,148 +1,251 @@
-import type { ExtractedFields } from '../types';
+import type { ExtractedFields, ExtractionMeta, FormattedFinancialFields, ParsedExtractionResult } from '../types';
 
-const lineBreakPattern = /\r/g;
-const whitespacePattern = /\s+/g;
+const PERSONAL_INFORMATION = 'PERSONAL INFORMATION';
+const IDENTITY_DETAILS = 'IDENTITY DETAILS';
+const EMPLOYMENT_FINANCIAL_DETAILS = 'EMPLOYMENT & FINANCIAL DETAILS';
+const REQUESTED_METRICS = 'REQUESTED METRICS';
+const END_OF_DOCUMENT = 'END OF DOCUMENT';
 
-const fieldLabels = {
-  fullName: ['full name', 'customer name', 'applicant name', 'name'],
-  email: ['email address', 'email'],
-  phoneNumber: ['phone number', 'mobile number', 'contact number', 'phone'],
-  panNumber: ['pan number', 'pan'],
-  aadhaarNumber: ['aadhaar number', 'aadhaar', 'aadhar number', 'aadhar'],
-  dateOfBirth: ['date of birth', 'dob', 'd.o.b'],
-  address: ['residential address', 'current address', 'address'],
-  employmentType: ['employment type', 'occupation', 'profession', 'job type'],
-  monthlyIncome: ['monthly income', 'income'],
-  requestedLoanAmount: ['requested loan amount', 'loan amount', 'requested amount'],
-} as const;
+const FULL_NAME = 'Full Name';
+const EMAIL_ADDRESS = 'Email Address';
+const PHONE_NUMBER = 'Phone Number';
+const DATE_OF_BIRTH = 'Date of Birth';
+const ADDRESS = 'Address';
+const EMPLOYMENT_TYPE = 'Employment Type';
+const MONTHLY_INCOME = 'Monthly Income';
+const REQUESTED_LOAN_AMOUNT = 'Requested Loan Amount';
 
-const allLabels = [
-  ...fieldLabels.fullName,
-  ...fieldLabels.email,
-  ...fieldLabels.phoneNumber,
-  ...fieldLabels.panNumber,
-  ...fieldLabels.aadhaarNumber,
-  ...fieldLabels.dateOfBirth,
-  ...fieldLabels.address,
-  ...fieldLabels.employmentType,
-  ...fieldLabels.monthlyIncome,
-  ...fieldLabels.requestedLoanAmount,
-].sort((first, second) => second.length - first.length);
+const CRITICAL_FIELDS: Array<keyof ExtractedFields> = [
+  'fullName',
+  'email',
+  'phoneNumber',
+  'panNumber',
+  'aadhaarNumber',
+  'dateOfBirth',
+  'address',
+  'employmentType',
+  'monthlyIncome',
+  'requestedLoanAmount',
+];
 
-const emailPattern = /\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/;
-const phonePattern = /\b(?:\+91[-\s]?)?([6-9]\d{9})\b/;
-const panPattern = /\b([A-Z]{5}\d{4}[A-Z])\b/;
-const aadhaarPattern = /\b((?:\d{4}[\s-]?){2}\d{4})\b/;
+const datePattern = /\b(\d{4}-\d{2}-\d{2}|\d{2}\/\d{2}\/\d{4}|\d{2}-\d{2}-\d{4})\b/;
 
-function normalizeText(text: string): string {
-  return text.replace(lineBreakPattern, '\n');
+function normalizeText(rawText: string): string {
+  return rawText.replace(/\s+/g, ' ').trim();
 }
 
-function normalizeLine(line: string): string {
-  return line.replace(whitespacePattern, ' ').trim();
+function toAnchorText(text: string): string {
+  return text.toUpperCase();
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function findAnchorIndex(anchorText: string, anchor: string, fromIndex = 0): number {
+  return anchorText.indexOf(anchor.toUpperCase(), fromIndex);
 }
 
-function stopLabelLookahead(): string {
-  return `(?=\\b(?:${allLabels.map(escapeRegExp).join('|')})\\b|$)`;
-}
+function sliceAfterAnchor(text: string, anchorText: string, startAnchor: string, endAnchors: string[], fromIndex = 0): string {
+  const startIndex = findAnchorIndex(anchorText, startAnchor, fromIndex);
+  if (startIndex === -1) {
+    return '';
+  }
 
-function extractAfterLabel(text: string, labels: readonly string[]): string {
-  const normalizedText = normalizeText(text);
-  const lines = normalizedText.split('\n').map(normalizeLine).filter(Boolean);
-  const stopLookahead = stopLabelLookahead();
+  const contentStart = startIndex + startAnchor.length;
+  let endIndex = text.length;
 
-  for (const line of lines) {
-    for (const label of labels) {
-      const regex = new RegExp(
-        `\\b${escapeRegExp(label)}\\b\\s*[:\\-]?\\s*(.+?)\\s*${stopLookahead}`,
-        'i'
-      );
-      const match = line.match(regex);
-      if (match?.[1]) {
-        return match[1].trim();
-      }
+  for (const endAnchor of endAnchors) {
+    const candidateIndex = findAnchorIndex(anchorText, endAnchor, contentStart);
+    if (candidateIndex !== -1 && candidateIndex < endIndex) {
+      endIndex = candidateIndex;
     }
   }
 
-  for (const label of labels) {
-    const regex = new RegExp(
-      `\\b${escapeRegExp(label)}\\b\\s*[:\\-]?\\s*(.+?)\\s*${stopLookahead}`,
-      'is'
-    );
-    const match = normalizedText.match(regex);
-    if (match?.[1]) {
-      return normalizeLine(match[1]);
-    }
+  if (endIndex <= contentStart) {
+    return '';
   }
 
-  return '';
+  return text.substring(contentStart, endIndex).trim();
 }
 
-function extractPatternValue(text: string, pattern: RegExp): string {
+function pickFirstMatch(text: string, pattern: RegExp): string {
   const match = text.match(pattern);
-  if (match?.[1]) {
-    return match[1].trim();
-  }
-
-  return '';
+  return match?.[1]?.trim() ?? '';
 }
 
-function extractNumericValueAfterLabel(text: string, labels: readonly string[], valuePattern: RegExp): string {
-  const normalizedText = normalizeText(text);
-  const lines = normalizedText.split('\n').map(normalizeLine).filter(Boolean);
-
-  for (const line of lines) {
-    for (const label of labels) {
-      const regex = new RegExp(`\\b${escapeRegExp(label)}\\b\\s*[:\\-]?\\s*${valuePattern.source}`, valuePattern.flags.includes('i') ? valuePattern.flags : `${valuePattern.flags}i`);
-      const match = line.match(regex);
-      if (match?.[1]) {
-        return match[1].trim();
-      }
-    }
-  }
-
-  for (const label of labels) {
-    const regex = new RegExp(`\\b${escapeRegExp(label)}\\b[^\\n]*?${valuePattern.source}`, valuePattern.flags.includes('i') ? valuePattern.flags : `${valuePattern.flags}is`);
-    const match = normalizedText.match(regex);
-    if (match?.[1]) {
-      return match[1].trim();
-    }
-  }
-
-  return '';
+function extractEmail(section: string): string {
+  return pickFirstMatch(section, /\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/);
 }
 
-export function parseFields(text: string): ExtractedFields {
-  const normalized = normalizeText(text);
-  const lines = normalized.split('\n').map(normalizeLine).filter(Boolean);
-  const joined = lines.join(' ');
+function extractPhone(section: string): string {
+  return pickFirstMatch(section, /\b(?:\+91[-\s]?)?([6-9]\d{9})\b/);
+}
 
-  const fullName = extractAfterLabel(normalized, fieldLabels.fullName).replace(/\b(?:email|phone|pan|aadhaar|address|income|loan)\b.*$/i, '').trim();
-  const email = extractPatternValue(joined, emailPattern);
-  const phoneNumber = extractNumericValueAfterLabel(normalized, fieldLabels.phoneNumber, phonePattern);
-  const panNumber = extractPatternValue(joined, panPattern);
-  const aadhaarNumber = extractNumericValueAfterLabel(normalized, fieldLabels.aadhaarNumber, aadhaarPattern);
+function extractPan(section: string): string {
+  return pickFirstMatch(section, /\b([A-Z]{5}\d{4}[A-Z])\b/i).toUpperCase();
+}
 
-  const dateOfBirth = extractAfterLabel(normalized, fieldLabels.dateOfBirth);
-  const address = extractAfterLabel(normalized, fieldLabels.address);
-  const employmentType = extractAfterLabel(normalized, fieldLabels.employmentType);
-  const monthlyIncome = extractAfterLabel(normalized, fieldLabels.monthlyIncome);
-  const requestedLoanAmount = extractAfterLabel(normalized, fieldLabels.requestedLoanAmount);
+function extractAadhaar(section: string): string {
+  return pickFirstMatch(section, /\b(\d{12})\b/);
+}
+
+function extractDateOfBirth(section: string): string {
+  return pickFirstMatch(section, datePattern);
+}
+
+function cleanLeadingNoise(value: string): string {
+  return value.replace(/^[:\s]+/, '').trim();
+}
+
+function cleanEmailFragments(value: string): string {
+  return value.replace(/\S*@\S*/g, '').replace(/\s+/g, ' ').trim();
+}
+
+function extractFullName(personalZone: string): string {
+  return cleanLeadingNoise(
+    sliceAfterAnchor(personalZone, toAnchorText(personalZone), FULL_NAME, [EMAIL_ADDRESS, PHONE_NUMBER, DATE_OF_BIRTH, ADDRESS])
+  );
+}
+
+function extractAddress(rawText: string, anchorText: string): string {
+  const personalStartIndex = findAnchorIndex(anchorText, PERSONAL_INFORMATION);
+  const candidateIndexes = [
+    personalStartIndex,
+    findAnchorIndex(anchorText, FULL_NAME, personalStartIndex),
+    findAnchorIndex(anchorText, EMAIL_ADDRESS, personalStartIndex),
+    findAnchorIndex(anchorText, PHONE_NUMBER, personalStartIndex),
+    findAnchorIndex(anchorText, DATE_OF_BIRTH, personalStartIndex),
+  ].filter((index) => index >= 0);
+  const searchStart = candidateIndexes.length > 0 ? Math.max(...candidateIndexes) : 0;
+
+  const addressLabelIndex = findAnchorIndex(anchorText, ADDRESS, searchStart);
+  const identityLabelIndex = findAnchorIndex(anchorText, IDENTITY_DETAILS, addressLabelIndex + ADDRESS.length);
+
+  if (addressLabelIndex !== -1 && identityLabelIndex !== -1 && identityLabelIndex > addressLabelIndex) {
+    let addressSection = rawText.substring(addressLabelIndex + ADDRESS.length, identityLabelIndex);
+    addressSection = addressSection.replace(/^[:\s]+/, '').trim();
+    return cleanEmailFragments(addressSection);
+  }
+
+  const fallbackSection = rawText.split(/Address\s*:?/i)[1]?.split(/IDENTITY/i)[0] ?? '';
+  return cleanEmailFragments(fallbackSection.trim());
+}
+
+function extractEmploymentType(section: string): string {
+  const match = section.match(/\b(Salaried|Self-employed|Self employed|Other)\b/i);
+  if (!match?.[1]) {
+    return '';
+  }
+
+  const value = match[1].toLowerCase();
+  if (value === 'self employed') {
+    return 'Self-employed';
+  }
+
+  if (value === 'salaried') {
+    return 'Salaried';
+  }
+
+  return 'Other';
+}
+
+function extractDigits(section: string): string {
+  const match = section.match(/\b(\d+)\b/);
+  return match?.[1]?.trim() ?? '';
+}
+
+function extractNumericField(section: string): string {
+  return extractDigits(section.replace(/\b(?:INR|REQUESTED|METRICS|DEDUCTIONS|END OF DOCUMENT)\b/gi, ' '));
+}
+
+function formatIndianCurrency(value: string | number): string {
+  const numericText = typeof value === 'number' ? String(value) : value.replace(/[^\d.-]/g, '');
+  if (!numericText) {
+    return '';
+  }
+
+  const numericValue = Number(numericText);
+  if (!Number.isFinite(numericValue)) {
+    return '';
+  }
+
+  return Math.trunc(numericValue).toLocaleString('en-IN');
+}
+
+function buildExtractionMeta(fields: ExtractedFields): ExtractionMeta {
+  const isComplete = CRITICAL_FIELDS.every((field) => fields[field].trim().length > 0);
 
   return {
-    fullName,
-    email,
-    phoneNumber,
-    panNumber: panNumber.toUpperCase(),
-    aadhaarNumber,
-    dateOfBirth,
-    address,
-    employmentType,
-    monthlyIncome,
-    requestedLoanAmount,
+    executionTimestamp: new Date().toISOString(),
+    isComplete,
   };
 }
+
+export function parseFields(rawText: string): ParsedExtractionResult {
+  const normalizedText = normalizeText(rawText);
+  const anchorText = toAnchorText(normalizedText);
+
+  const personalZone =
+    sliceAfterAnchor(normalizedText, anchorText, PERSONAL_INFORMATION, [IDENTITY_DETAILS, EMPLOYMENT_FINANCIAL_DETAILS, REQUESTED_METRICS, END_OF_DOCUMENT]) ||
+    normalizedText;
+
+  const identityZone =
+    sliceAfterAnchor(normalizedText, anchorText, IDENTITY_DETAILS, [EMPLOYMENT_FINANCIAL_DETAILS, REQUESTED_METRICS, END_OF_DOCUMENT]) ||
+    normalizedText;
+
+  const employmentZone =
+    sliceAfterAnchor(normalizedText, anchorText, EMPLOYMENT_FINANCIAL_DETAILS, [REQUESTED_METRICS, END_OF_DOCUMENT]) ||
+    normalizedText;
+
+  const requestedMetricsZone =
+    sliceAfterAnchor(normalizedText, anchorText, REQUESTED_METRICS, [END_OF_DOCUMENT]) ||
+    normalizedText;
+
+  const fullName = extractFullName(personalZone);
+
+  const emailSection = sliceAfterAnchor(personalZone, toAnchorText(personalZone), EMAIL_ADDRESS, [PHONE_NUMBER, DATE_OF_BIRTH, ADDRESS]);
+  const email = extractEmail(emailSection);
+
+  const phoneSection = sliceAfterAnchor(personalZone, toAnchorText(personalZone), PHONE_NUMBER, [DATE_OF_BIRTH, ADDRESS]);
+  const phoneNumber = extractPhone(phoneSection);
+
+  const dobSection = sliceAfterAnchor(personalZone, toAnchorText(personalZone), DATE_OF_BIRTH, [ADDRESS, IDENTITY_DETAILS, EMPLOYMENT_FINANCIAL_DETAILS]);
+  const dateOfBirth = extractDateOfBirth(dobSection);
+
+  const address = extractAddress(normalizedText, anchorText);
+
+  const panNumber = extractPan(identityZone);
+  const aadhaarNumber = extractAadhaar(identityZone);
+
+  const employmentTypeSection = sliceAfterAnchor(employmentZone, toAnchorText(employmentZone), EMPLOYMENT_TYPE, [MONTHLY_INCOME, REQUESTED_METRICS, END_OF_DOCUMENT]);
+  const employmentType = extractEmploymentType(employmentTypeSection || employmentZone);
+
+  const monthlyIncomeSection = sliceAfterAnchor(employmentZone, toAnchorText(employmentZone), MONTHLY_INCOME, [REQUESTED_METRICS, END_OF_DOCUMENT]);
+  const monthlyIncome = extractNumericField(monthlyIncomeSection);
+
+  const requestedLoanAmountSection = sliceAfterAnchor(requestedMetricsZone, toAnchorText(requestedMetricsZone), REQUESTED_LOAN_AMOUNT, [END_OF_DOCUMENT]);
+  const requestedLoanAmount = extractNumericField(requestedLoanAmountSection);
+
+  const extractedFields: ExtractedFields = {
+    fullName: fullName.trim(),
+    email: email.trim(),
+    phoneNumber: phoneNumber.trim(),
+    panNumber: panNumber.trim(),
+    aadhaarNumber: aadhaarNumber.trim(),
+    dateOfBirth: dateOfBirth.trim(),
+    address: address.trim(),
+    employmentType: employmentType.trim(),
+    monthlyIncome: monthlyIncome.trim(),
+    requestedLoanAmount: requestedLoanAmount.trim(),
+  };
+
+  const formattedFinancialFields: FormattedFinancialFields = {
+    monthlyIncome: formatIndianCurrency(extractedFields.monthlyIncome),
+    requestedLoanAmount: formatIndianCurrency(extractedFields.requestedLoanAmount),
+  };
+
+  return {
+    extractedFields,
+    formattedFinancialFields,
+    extractionMeta: buildExtractionMeta(extractedFields),
+  };
+}
+
+export { formatIndianCurrency };

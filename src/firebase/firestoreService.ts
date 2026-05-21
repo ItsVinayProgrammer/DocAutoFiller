@@ -1,10 +1,11 @@
 import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebaseConfig'; 
-import type { ExtractedFields } from '../types';
+import type { ExtractionMeta, ExtractedFields } from '../types';
 
 type LoanApplicationPayload = {
   extractedFields: ExtractedFields;
   rawExtractedText: string;
+  extractionMeta: ExtractionMeta;
   status: 'Submitted';
   source: 'Document Upload Prototype';
 };

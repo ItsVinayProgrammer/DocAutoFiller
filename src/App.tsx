@@ -3,11 +3,11 @@ import { FileUpload } from './components/FileUpload';
 import { ExtractedForm } from './components/ExtractedForm';
 import { PreviewCard } from './components/PreviewCard';
 import { extractPdfText } from './utils/extractPdfText';
-import { parseFields } from './utils/parseFields';
+import { formatIndianCurrency, parseFields } from './utils/parseFields';
 import { validateExtractedFields } from './utils/validators';
 import { saveLoanApplication } from './firebase/firestoreService';
 import { isFirebaseConfigured } from './firebase/firebaseConfig';
-import type { ExtractedFields, SubmissionStatus } from './types';
+import type { ExtractionMeta, ExtractedFields, FormattedFinancialFields, SubmissionStatus } from './types';
 
 
 const initialFields: ExtractedFields = {
@@ -23,8 +23,15 @@ const initialFields: ExtractedFields = {
   requestedLoanAmount: '',
 };
 
+const initialFormattedFinancialFields: FormattedFinancialFields = {
+  monthlyIncome: '',
+  requestedLoanAmount: '',
+};
+
 export default function App() {
   const [fields, setFields] = useState<ExtractedFields>(initialFields);
+  const [formattedFinancialFields, setFormattedFinancialFields] = useState<FormattedFinancialFields>(initialFormattedFinancialFields);
+  const [extractionMeta, setExtractionMeta] = useState<ExtractionMeta | null>(null);
   const [rawText, setRawText] = useState('');
   const [fileName, setFileName] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
@@ -39,12 +46,15 @@ export default function App() {
     setValidationErrors([]);
     setFileName(file.name);
     setIsExtracting(true);
+    setExtractionMeta(null);
 
     try {
       const text = await extractPdfText(file);
       const parsed = parseFields(text);
       setRawText(text);
-      setFields((current) => ({ ...current, ...parsed }));
+      setFields(parsed.extractedFields);
+      setFormattedFinancialFields(parsed.formattedFinancialFields);
+      setExtractionMeta(parsed.extractionMeta);
       setStatus({ type: 'success', message: 'Document extracted successfully.' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to extract the uploaded document.';
@@ -55,7 +65,17 @@ export default function App() {
   };
 
   const handleChange = (key: keyof ExtractedFields, value: string) => {
-    setFields((current) => ({ ...current, [key]: value }));
+    setFields((current) => {
+      const nextFields = { ...current, [key]: value };
+      if (key === 'monthlyIncome' || key === 'requestedLoanAmount') {
+        setFormattedFinancialFields({
+          monthlyIncome: formatIndianCurrency(nextFields.monthlyIncome),
+          requestedLoanAmount: formatIndianCurrency(nextFields.requestedLoanAmount),
+        });
+      }
+
+      return nextFields;
+    });
   };
 
   const handleSubmit = async () => {
@@ -73,6 +93,10 @@ export default function App() {
       await saveLoanApplication({
         extractedFields: fields,
         rawExtractedText: rawText,
+        extractionMeta: extractionMeta ?? {
+          executionTimestamp: new Date().toISOString(),
+          isComplete: false,
+        },
         status: 'Submitted',
         source: 'Document Upload Prototype',
       });
@@ -108,6 +132,12 @@ export default function App() {
               Firebase is not configured yet. Add your VITE_FIREBASE_* values in a local .env.local file, then restart the dev server.
             </div>
           ) : null}
+          {extractionMeta ? (
+            <div className={`alert ${extractionMeta.isComplete ? 'success' : 'error'}`}>
+              Parsed at {new Date(extractionMeta.executionTimestamp).toLocaleString('en-IN')} ·
+              {extractionMeta.isComplete ? ' Complete capture' : ' Partial capture - review required'}
+            </div>
+          ) : null}
           <FileUpload onFileSelected={handleFileSelected} isLoading={isExtracting} />
           <PreviewCard title="Raw extracted text" subtitle="Audit trail and parsing input" content={rawText} emptyLabel="Upload a PDF to view extracted text." />
           {status.message ? <div className={`alert ${status.type}`}>{status.message}</div> : null}
@@ -116,6 +146,7 @@ export default function App() {
         <div className="right-column">
           <ExtractedForm
             fields={fields}
+            formattedFinancialFields={formattedFinancialFields}
             onFieldChange={handleChange}
             onSubmit={handleSubmit}
             isSubmitting={isSubmitting}
