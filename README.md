@@ -4,7 +4,7 @@ DocAutoFiller is a browser-first prototype for loan intake and document review. 
 
 > **Prototype only:** upload mock or dummy PDFs only. Never use real customer documents or actual PII.
 
-## ✨ Highlights
+## Highlights
 
 - Multi-document PDF upload with browser-side text extraction.
 - Field parsing, confidence scoring, and merge/conflict handling.
@@ -13,7 +13,7 @@ DocAutoFiller is a browser-first prototype for loan intake and document review. 
 - Compact tabbed workflow for upload, review, and admin actions.
 - Error boundary protection so demo crashes fail gracefully.
 
-## 🛠 Tech Stack
+## Tech Stack
 
 - React 19.1
 - Vite 7
@@ -22,7 +22,7 @@ DocAutoFiller is a browser-first prototype for loan intake and document review. 
 - pdfjs-dist 4.10
 - react-router-dom 7.15
 
-## 🔒 Security & Privacy
+##  Security & Privacy
 
 - Use dummy PDFs only. Real PII should never enter this prototype.
 - Keep Firebase values in `.env.local`; never commit that file.
@@ -31,7 +31,7 @@ DocAutoFiller is a browser-first prototype for loan intake and document review. 
 - PDF text extraction happens in the browser before data is normalized and submitted.
 - Image-only or scanned PDFs are not OCR'd yet.
 
-## 🚀 Getting Started
+## Getting Started
 
 ```powershell
 Copy-Item .env.example .env.local
@@ -57,7 +57,7 @@ VITE_FIREBASE_MEASUREMENT_ID=
 
 The app uses safe placeholders when these values are missing, which keeps the UI usable for demos while disabling Firestore operations.
 
-## 📜 Scripts
+##  Scripts
 
 | Command | Description |
 | --- | --- |
@@ -65,7 +65,7 @@ The app uses safe placeholders when these values are missing, which keeps the UI
 | `npm run build` | Type-check the app and create a production build. |
 | `npm run preview` | Preview the production build locally. |
 
-## 🧭 Workflow
+## Workflow
 
 1. Upload one or more borrower PDFs.
 2. The app extracts text locally with pdf.js.
@@ -75,7 +75,7 @@ The app uses safe placeholders when these values are missing, which keeps the UI
 6. Submit the final application to Firestore.
 7. Open `/admin` to inspect submitted records.
 
-## 📁 Project Structure
+## Project Structure
 
 ```text
 src/
@@ -88,7 +88,7 @@ src/
 	styles.css
 ```
 
-## 🗃️ Firestore Data
+## Firestore Data
 
 The app saves reviewed applications to the `loanApplications` collection. Representative fields include:
 
