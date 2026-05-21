@@ -108,7 +108,7 @@ The app saves reviewed applications to the `loanApplications` collection. Repres
 }
 ```
 
-## 📝 Notes
+##  Notes
 
 - `src/firebase/firebaseConfig.ts` is env-driven and falls back to placeholders when Firebase is not configured.
 - Scanned PDFs are out of scope until OCR is added.
