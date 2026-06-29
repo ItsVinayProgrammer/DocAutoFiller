@@ -3,6 +3,8 @@
 DocAutoFiller is a browser-first prototype for loan intake and document review. It extracts text from uploaded PDFs, merges multiple documents into a single borrower profile, flags conflicts, scores confidence, runs validation and risk checks, and stores reviewed applications in Firestore.
 
 > **Prototype only:** upload mock or dummy PDFs only. Never use real customer documents or actual PII.
+> 
+<img width="1896" height="1077" alt="Screenshot 2026-05-21 214718" src="https://github.com/user-attachments/assets/0ed23e6b-2710-4d3e-bf22-8ea610d4f15a" />
 
 ## Highlights
 
