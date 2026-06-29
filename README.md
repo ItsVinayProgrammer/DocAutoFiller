@@ -43,7 +43,7 @@ npm run dev
 
 If you prefer a different shell, copy `.env.example` to `.env.local` with the equivalent command for your environment.
 
-## ⚙️ Environment Variables
+## Environment Variables
 
 Populate `.env.local` with your Firebase web app values:
 
